@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>四杆机构参数计算器 · 内联未知参数滑块（弱定义滑块联动修复）</title>
+  <style>
+    :root{ --bg:#0b0f14;--fg:#e8edf2;--muted:#9fb0c3;--accent:#59c;--danger:#ff6b6b;--ok:#2ecc71;--card:#121821;--line:#1d2633; }
+    *{box-sizing:border-box}
+    body{margin:0;font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;color:var(--fg);background:linear-gradient(180deg,#0b0f14,#0f1622) fixed;}
+    h1{font-size:24px;margin:8px 0 0}
+    .wrap{max-width:1400px;margin:0 auto;padding:24px}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);grid-gap:12px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+    .col-4{grid-column:span 4}.col-8{grid-column:span 8}.col-6{grid-column:span 6}.col-12{grid-column:span 12}
+    label{display:block;font-weight:600;margin-bottom:6px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    input[type="number"], select{padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#0c131d;color:var(--fg)}
+    .param-grid input[type="number"]{font-size:15px;width:150px}
+    input[type="range"]{width:100%; height:22px}
+    small{color:var(--muted)}
+    button{appearance:none;border:0;border-radius:12px;padding:12px 16px;background:var(--accent);color:#fff;font-weight:700;cursor:pointer;font-size:15px}
+    button.secondary{background:#2b3546}
+    .pill{background:#152234;border:1px solid #1e2c44;border-radius:999px;padding:6px 10px;display:inline-flex;gap:8px;align-items:center}
+    .warn{color:var(--danger)}
+    .ok{color:var(--ok)}
+    .results-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .metric{background:#0e1520;border:1px solid var(--line);border-radius:12px;padding:10px}
+    .metric h3{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:600}
+    .metric .val{font-size:28px;font-weight:800}
+    .muted{color:var(--muted)}
+    .divider{border-top:1px dashed var(--line);margin:10px 0}
+    .badge{font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid var(--line);background:#101827;color:#a9b5c2}
+    .svgwrap{height:900px}
+    .legend{display:flex;gap:12px;flex-wrap:wrap}
+    .legend .dot{width:12px;height:12px;border-radius:50%}
+    .row > .grow{flex:1}
+    pre#testLog{background:#0e1520;border:1px solid var(--line);border-radius:10px;padding:12px;max-height:300px;overflow:auto}
+    .card, .card * { pointer-events: auto; }
+    .svgwrap { position: relative; z-index: 0; }
+    input[type="number"].auto-fill{ color: var(--muted); border-style:dashed; }
+    input[type="number"].auto-fill::placeholder{ color: var(--muted); opacity:.9; }
+
+    /* language segmented control */
+    .lang-switch{display:inline-flex;border:1px solid #1e2c44;border-radius:999px;background:#152234;overflow:hidden}
+    .lang-switch button{background:transparent;color:#a9b5c2;padding:6px 10px;border:0;cursor:pointer;font-weight:700}
+    .lang-switch button.active{background:var(--accent);color:#fff}
+    .topbar{display:flex;justify-content:flex-end;margin-bottom:10px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <div class="lang-switch" id="langSwitch" role="tablist" aria-label="Language switch">
+        <button id="btnZH" role="tab" aria-selected="true" class="active">中文</button>
+        <button id="btnEN" role="tab" aria-selected="false">EN</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card col-8">
+        <div class="row" style="justify-content:space-between;align-items:flex-start">
+          <div>
+            <h1><span data-i18n="title">四杆机构参数计算器</span> <span class="badge">Crank–Rocker 4‑bar</span></h1>
+            <div class="muted" data-i18n="desc">未知参数滑块<strong>内联</strong>到每个参数右侧：留空或填 0 = 未知，将由滑块控制。由“目标约束”反推的值以浅色虚线显示（弱定义），滑块可继续拖动；只有手动输入才算强定义并优先于滑块。</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+            <div class="pill"><span data-i18n="assembly">装配型式：</span>
+              <label class="row"><input type="radio" name="asm" value="open" checked> <span data-i18n="open">开式</span></label>
+              <label class="row"><input type="radio" name="asm" value="cross"> <span data-i18n="cross">交叉式</span></label>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid param-grid" style="margin-top:10px">
+          <div class="col-6">
+            <label data-i18n="label_a">曲柄 a (mm)</label>
+            <div class="row">
+              <input id="a" type="number" data-i18n-ph="ph_example_30" placeholder="例如 30" step="0.01" />
+              <input id="ra" type="range" min="1" max="200" value="30" step="0.01" class="grow" />
+            </div>
+            <small data-i18n="hint_a">Crank · 留空=用滑块</small>
+          </div>
+          <div class="col-6">
+            <label data-i18n="label_b">连杆 b (mm)</label>
+            <div class="row">
+              <input id="b" type="number" data-i18n-ph="ph_example_70" placeholder="例如 70" step="0.01" />
+              <input id="rb" type="range" min="1" max="200" value="70" step="0.01" class="grow" />
+            </div>
+            <small data-i18n="hint_b">Coupler · 留空=用滑块</small>
+          </div>
+          <div class="col-6">
+            <label data-i18n="label_c">摇杆 c (mm)</label>
+            <div class="row">
+              <input id="c" type="number" data-i18n-ph="ph_example_60" placeholder="例如 60" step="0.01" />
+              <input id="rc" type="range" min="1" max="200" value="60" step="0.01" class="grow" />
+            </div>
+            <small data-i18n="hint_c">Rocker · 留空=用滑块</small>
+          </div>
+          <div class="col-6">
+            <label data-i18n="label_d">机架 d (mm)</label>
+            <div class="row">
+              <input id="d" type="number" data-i18n-ph="ph_example_90" placeholder="例如 90" step="0.01" />
+              <input id="rd" type="range" min="1" max="200" value="90" step="0.01" class="grow" />
+            </div>
+            <small data-i18n="hint_d">Ground · 留空=用滑块</small>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:10px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <b data-i18n="opt_constraints">可选目标约束</b>
+            <small class="muted" data-i18n="opt_desc">勾选后可将 <b>摇杆摆角</b> 或 <b>K</b> 作为目标来反推一个未知杆长（当且仅当 a/b/c/d 恰好有一个未强定义/未知时自动求解）。</small>
+          </div>
+          <div class="grid" style="margin-top:6px">
+            <div class="col-6">
+              <label><span data-i18n="target_swing">目标·摇杆摆角 (°)</span>
+                <span class="pill" style="margin-left:8px"><input id="useSwing" type="checkbox"/> <span data-i18n="use_as_constraint">作为约束</span></span>
+              </label>
+              <input id="swingTarget" type="number" data-i18n-ph="ph_swing" placeholder="例如 40（φmax−φmin）" step="0.01" />
+            </div>
+            <div class="col-6">
+              <label><span data-i18n="target_k">目标·行程速度变化系数 K</span>
+                <span class="pill" style="margin-left:8px"><input id="useK" type="checkbox"/> <span data-i18n="use_as_constraint">作为约束</span></span>
+              </label>
+              <input id="KTarget" type="number" data-i18n-ph="ph_k" placeholder="例如 1.40（快返比）" step="0.001" />
+            </div>
+          </div>
+        </div>
+
+        <div class="row" style="margin-top:10px;gap:10px">
+          <button id="calc" data-i18n="btn_compute">计算</button>
+          <button id="reset" class="secondary" data-i18n="btn_reset">清空</button>
+          <span class="muted" data-i18n="weak_vs_strong">浅色虚线=自动反推(弱定义)，滑块可继续拖动；手动输入=强定义，优先级更高。</span>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <b data-i18n="preview_title">机构预览 & 输入曲柄角 θ（仅在可装配范围内生效）</b>
+            <div class="legend">
+              <span class="row"><span class="dot" style="background:#89b4fa"></span><small data-i18n="legend_a">曲柄 a</small></span>
+              <span class="row"><span class="dot" style="background:#a6e3a1"></span><small data-i18n="legend_b">连杆 b</small></span>
+              <span class="row"><span class="dot" style="background:#f9e2af"></span><small data-i18n="legend_c">摇杆 c</small></span>
+              <span class="row"><span class="dot" style="background:#eba0ac"></span><small data-i18n="legend_d">机架 d</small></span>
+            </div>
+          </div>
+          <div class="row" style="gap:10px;align-items:center;margin-top:6px">
+            <input id="thetaRange" type="range" min="0" max="360" value="0" step="0.1" class="grow" />
+            <div style="min-width:120px"><code>θ = <span id="thetaLbl">0</span>°</code></div>
+            <button id="zoomBtn" class="secondary" data-i18n="zoom_btn">缩放 100%</button>
+          </div>
+          <div class="svgwrap" style="margin-top:8px">
+            <svg id="svg" viewBox="-20 -80 260 200" width="100%" height="100%">
+              <defs>
+                <marker id="dot" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" viewBox="0 0 10 10" refX="5" refY="5" orient="auto">
+                  <circle cx="5" cy="5" r="5" fill="#94a3b8" />
+                </marker>
+              </defs>
+              <rect x="-1000" y="-1000" width="2000" height="2000" fill="#0b111a" />
+              <g id="axes" stroke="#1f2a3a" stroke-width="0.8">
+                <line x1="-1000" y1="0" x2="1000" y2="0" />
+                <line x1="0" y1="-1000" x2="0" y2="1000" />
+              </g>
+              <g id="mech" stroke-width="3" stroke-linecap="round" fill="none">
+                <line id="linkA" stroke="#89b4fa" marker-start="url(#dot)" marker-end="url(#dot)" />
+                <line id="linkB" stroke="#a6e3a1" marker-start="url(#dot)" marker-end="url(#dot)" />
+                <line id="linkC" stroke="#f9e2af" marker-start="url(#dot)" marker-end="url(#dot)" />
+                <line id="linkD" stroke="#eba0ac" marker-start="url(#dot)" marker-end="url(#dot)" />
+              </g>
+            </svg>
+          </div>
+          <div class="row" style="margin-top:6px"><small class="muted" data-i18n="theta_hint">拖动 θ 观察机构姿态；当两圆相切即为极限位（死点）。</small></div>
+        </div>
+      </div>
+
+      <div class="card col-4">
+        <b data-i18n="results">计算结果</b>
+        <div class="divider"></div>
+        <div class="results-grid">
+          <div class="metric"><h3 data-i18n="m_fulla_h3">a 是否可整周</h3><div class="val" id="crankA">—</div><small class="muted"><span id="crankACov">—</span> <span data-i18n="m_cov_suffix">的 θ 可装配</span></small></div>
+          <div class="metric"><h3 data-i18n="m_swing_h3">摇杆摆角 φ<sub>max</sub>−φ<sub>min</sub></h3><div class="val" id="swing">—</div><small class="muted"><span data-i18n="unit_deg">单位：°</span></small></div>
+          <div class="metric"><h3 data-i18n="m_grashof_h3">机构判别 · Grashof 条件</h3><div class="val" id="classify">—</div><small class="muted" data-i18n="m_grashof_sub">判别结果</small></div>
+          <div class="metric"><h3 data-i18n="m_k_h3">行程速度变化系数 K</h3><div class="val" id="qrr">—</div><small class="muted" data-i18n="m_k_sub">快返比（回程角/去程角）</small></div>
+        </div>
+        <div id="solveHint" class="muted" style="margin-top:6px"></div>
+        <div class="divider"></div>
+        <div>
+          <div class="row" style="justify-content:space-between"><b data-i18n="copy_json">可复制 JSON</b><button id="copy" class="secondary" data-i18n="btn_copy">复制</button></div>
+          <pre id="json" style="white-space:pre-wrap;word-break:break-all;background:#0e1520;border:1px solid var(--line);border-radius:10px;padding:10px;margin:8px 0 0;max-height:220px;overflow:auto">{}</pre>
+        </div>
+        <div class="divider"></div>
+        <div>
+          <div class="row" style="justify-content:space-between;align-items:center"><b data-i18n="tests">内置测试</b><button id="runTestsBtn" class="secondary" data-i18n="run_tests">运行测试</button></div>
+          <pre id="testLog">(测试输出)</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="card col-12" style="margin-top:12px">
+      <b data-i18n="notes">说明</b>
+      <ul>
+        <li data-i18n="n1">输入框留空/为 0 → 视为未知，将由右侧滑块控制并参与计算。</li>
+        <li data-i18n="n2">自动反推会写入浅色虚线（弱定义）；滑块仍可拖动更改该值，且不会转为强定义，直至你手动编辑。</li>
+        <li data-i18n="n3">极限位：r=|O₄−B|=b±c；cosθ=(a²+d²−r²)/(2ad)。K=回程角/去程角。</li>
+      </ul>
+    </div>
+  </div>
+
+<script>
+(function(){
+'use strict';
+function $(sel){ return document.querySelector(sel); }
+function $$(sel){ return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+function rad(d){ return d*Math.PI/180; } function deg(r){ return r*180/Math.PI; }
+function getAsm(){ var els=document.querySelectorAll('input[name="asm"]'); for(var i=0;i<els.length;i++){ if(els[i].checked) return els[i].value; } return 'open'; }
+function niceNum(x, d){ if(d===void 0) d=4; if(!isFinite(x)) return '—'; var abs=Math.abs(x); if(abs>=1e4||abs<1e-3) return x.toExponential(3); return x.toFixed(d).replace(/\.0+$/,'').replace(/(\.\d*?)0+$/,'$1'); }
+function setText(sel, val){ var el=$(sel); if(el) el.textContent = val; }
+function escapeHTML(s){ return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c];}); }
+function setHTML(sel, html){ var el=$(sel); if(!el) return; el.innerHTML = html; }
+var EDIT = { suppressRanges:false, suppressSolve:false, editingId:null };
+function circleIntersections(x0,y0,r0,x1,y1,r1){ var dx=x1-x0, dy=y1-y0; var d=Math.hypot(dx,dy); if(d>r0+r1+1e-9) return []; if(d<Math.abs(r0-r1)-1e-9) return []; if(d<1e-12) return []; var a=(r0*r0 - r1*r1 + d*d)/(2*d); var h2=r0*r0 - a*a; if(h2<-1e-9) return []; var h=Math.sqrt(Math.max(0,h2)); var xm=x0 + a*dx/d; var ym=y0 + a*dy/d; var rx=-dy*(h/d); var ry=dx*(h/d); var p1={ x: xm + rx, y: ym + ry }; var p2={ x: xm - rx, y: ym - ry }; return [p1,p2]; }
+function choosePoint(p1,p2,mode){ if(!p2) return p1; return (mode==='open') ? (p1.y>=p2.y? p1:p2) : (p1.y<=p2.y? p1:p2); }
+function classifyGrashof(a,b,c,d){ var arr=[a,b,c,d].slice().sort(function(x,y){return x-y;}); var S=arr[0], L=arr[3], P=arr[1], Q=arr[2]; var g = S+L <= P+Q ? 'Grashof' : 'Non‑Grashof'; return { type: g, S: S, L: L, P: P, Q: Q };
+}
+function feasibleThetaRange(a,b,c,d){ var rMax=b+c, rMin=Math.abs(b-c); var coHi=(a*a + d*d - rMin*rMin)/(2*a*d); var coLo=(a*a + d*d - rMax*rMax)/(2*a*d); var clamp=function(x){ return Math.max(-1,Math.min(1,x)); }; var lo=Math.acos(clamp(coHi)); var hi=Math.acos(clamp(coLo)); if(isNaN(lo)||isNaN(hi)) return []; if(lo>hi) return []; return [ [lo, hi], [2*Math.PI - hi, 2*Math.PI - lo] ]; }
+function solvePose(a,b,c,d,theta,asm){ var O2={ x: 0, y: 0 }, O4={ x: d, y: 0 }; var B={ x: a*Math.cos(theta), y: a*Math.sin(theta) }; var inter = circleIntersections(B.x,B.y,b, O4.x,O4.y,c); if(inter.length===0) return null; var C=choosePoint(inter[0], inter[1], asm); var phi=Math.atan2(C.y-O4.y, C.x-O4.x); return { O2: O2, O4: O4, B: B, C: C, phi: phi };
+}
+function computeAll(a,b,c,d,asm){ var intervals=feasibleThetaRange(a,b,c,d); if(intervals.length===0) return { ok: false, msg: t('err_no_assembly'), intervals: [] }; var segments=[]; var sampleN=720; for(var k=0;k<intervals.length;k++){ var t0=intervals[k][0], t1=intervals[k][1]; var ts=[], ps=[]; for(var i=0;i<=sampleN;i++){ var t=t0+(t1-t0)*i/sampleN; var p=solvePose(a,b,c,d,t,asm); if(!p) continue; ts.push(t); ps.push(p.phi); } if(ts.length) segments.push({s:t0, ts:ts, ps:ps}); } if(!segments.length) return { ok:false, msg:t('err_sampling'), intervals:intervals }; segments.sort(function(u,v){ return u.s - v.s; }); var thetas=[], phis=[]; var last=null; for(var si=0;si<segments.length;si++){ var seg=segments[si]; for(var j=0;j<seg.ts.length;j++){ var tt=seg.ts[j]; if(last!=null && tt<=last) tt+=2*Math.PI; thetas.push(tt); phis.push(seg.ps[j]); last=tt; } } var phiMin=Infinity, phiMax=-Infinity; for(var j2=0;j2<phis.length;j2++){ var p2=phis[j2]; if(p2<phiMin) phiMin=p2; if(p2>phiMax) phiMax=p2; } var swing=(phiMax-phiMin)*180/Math.PI; var inc=0, dec=0; for(var m=1;m<phis.length;m++){ var dphi=phis[m]-phis[m-1]; var dth=thetas[m]-thetas[m-1]; if(dphi>0) inc+=dth; else if(dphi<0) dec+=dth; } var eps=1e-6; var K; if(inc>eps && dec>eps){ K=dec/inc; } else { K=1; } var coverage=Math.max(0, Math.min(1, (thetas[thetas.length-1]-thetas[0])/(2*Math.PI))); var crankAFull=coverage>0.999; return { ok:true, intervals:intervals, swing:swing, K:K, coverageA:coverage, crankAFull:crankAFull, classify: classifyGrashof(a,b,c,d) };
+}
+function isStrongDefined(id){ var num=$('#'+id); if(!num) return false; if(num.value==='' || num.value==='0') return false; if(num.dataset.auto==='1') return false; return isFinite(parseFloat(num.value)); }
+function markAuto(id, x){ var num=$('#'+id), rng=$('#r'+id); if(num){ num.value = (x!=null? Number(x).toFixed(4):''); num.dataset.auto='1'; num.classList.add('auto-fill'); } if(rng && x!=null){ rng.value = Number(x).toFixed(4); } }
+function clearAuto(id){ var num=$('#'+id); if(!num) return; delete num.dataset.auto; num.classList.remove('auto-fill'); }
+function getValueForCompute(id){ if(isStrongDefined(id)) return parseFloat($('#'+id).value); var r=$('#r'+id); return r? parseFloat(r.value) : null; }
+function countWeakUnknown(){ var ids=['a','b','c','d']; var cnt=0, id=null; for(var i=0;i<ids.length;i++){ if(!isStrongDefined(ids[i])){ cnt++; id=ids[i]; } } return { cnt: cnt, id: id };
+}
+function solveUnknownByTarget(unknownId, which, target){
+  var rEl=$('#r'+unknownId); if(!rEl) return null;
+  var lo=parseFloat(rEl.min)||1e-3, hi=parseFloat(rEl.max)||1e3; if(!(lo<hi)) return null;
+  var a=getValueForCompute('a'), b=getValueForCompute('b'), c=getValueForCompute('c'), d=getValueForCompute('d'); var asm=getAsm();
+  function setX(x){ if(unknownId==='a') a=x; else if(unknownId==='b') b=x; else if(unknownId==='c') c=x; else d=x; }
+  var N=260, bestAnyX=null, bestAnyCost=Infinity, bestIdealX=null, bestIdealErr=Infinity;
+  function costFor(x){
+    setX(x);
+    var res=computeAll(a,b,c,d,asm);
+    if(!res.ok) return 1e9;
+    var v=(which==='swing'? res.swing : res.K);
+    if(!isFinite(v)) return 1e9;
+    var base=Math.abs(v-target);
+    var penalty=0;
+    if(res.classify.type!=='Grashof') penalty+=1e4;
+    if(!res.crankAFull) penalty+=1e4*(1-res.coverageA);
+    return base + penalty;
+  }
+  function baseErrFor(x){
+    setX(x);
+    var r=computeAll(a,b,c,d,asm);
+    if(!r.ok) return {err:1e9, r:r};
+    var v=(which==='swing'? r.swing : r.K);
+    if(!isFinite(v)) return {err:1e9, r:r};
+    return {err:Math.abs(v-target), r:r};
+  }
+  for(var i=0;i<=N;i++){
+    var x=lo+(hi-lo)*i/N;
+    var be=baseErrFor(x);
+    if(be.r.classify && be.r.classify.type==='Grashof' && be.r.crankAFull){
+      if(be.err < bestIdealErr){ bestIdealErr = be.err; bestIdealX = x; }
+    }
+    var cst = costFor(x);
+    if(cst < bestAnyCost){ bestAnyCost = cst; bestAnyX = x; }
+  }
+  var bestX = (bestIdealX!=null)? bestIdealX : bestAnyX;
+  if(bestX==null) return null;
+  var span=Math.max(1e-6, (hi-lo)*0.2), L=Math.max(lo, bestX-span), R=Math.min(hi, bestX+span), phi=(Math.sqrt(5)-1)/2;
+  var x1=R-phi*(R-L), x2=L+phi*(R-L); var f1=costFor(x1), f2=costFor(x2);
+  for(var k=0;k<80;k++){
+    if(f1>f2){ L=x1; x1=x2; f1=f2; x2=L+phi*(R-L); f2=costFor(x2); }
+    else{ R=x2; x2=x1; f2=f1; x1=R-phi*(R-L); f1=costFor(x1); }
+    if(Math.abs(R-L)<1e-6) break;
+  }
+  var xbest=f1<f2? x1:x2; setX(xbest); var final=computeAll(a,b,c,d,asm); var finalVal=(which==='swing'? final.swing : final.K);
+  if(!final.ok || !isFinite(finalVal)) return null; return { x:xbest, val:finalVal, err:Math.abs(finalVal-target) };
+}
+function estimateRange(vals){ var arr=[]; for(var i=0;i<vals.length;i++){ if(vals[i]!=null) arr.push(vals[i]); } var base = arr.length? (arr.reduce(function(a,b){return a+b;},0)/arr.length) : 100; var min = Math.max(0.1, base*0.2); var max = base*3.5; return { min: min, max: max, init: Math.max(min, Math.min(max, base*0.8)) };
+}
+function refreshRanges(){ var a=getValueForCompute('a')||parseFloat($('#ra').value); var b=getValueForCompute('b')||parseFloat($('#rb').value); var c=getValueForCompute('c')||parseFloat($('#rc').value); var d=getValueForCompute('d')||parseFloat($('#rd').value); setRange('a', estimateRange([b,c,d])); setRange('b', estimateRange([a,c,d])); setRange('c', estimateRange([a,b,d])); setRange('d', estimateRange([a,b,c])); }
+function setRange(id, rng){ var r=$('#r'+id); if(!r) return; var prev=parseFloat(r.value); var newMin=parseFloat(rng.min.toFixed(4)); var newMax=parseFloat(rng.max.toFixed(4)); r.min=newMin; r.max=newMax; r.step='0.0001';
+  if(isNaN(prev) || prev<newMin || prev>newMax){ var fallback = getValueForCompute(id) || rng.init; r.value = String(Math.min(newMax, Math.max(newMin, fallback))); }
+}
+function syncNumberAndRange(id){ var num=$('#'+id), rng=$('#r'+id); if(!num||!rng) return;
+  rng.addEventListener('input', function(){ EDIT.suppressRanges=true; EDIT.suppressSolve=true; EDIT.editingId=id; if(num){ if(isStrongDefined(id)){ num.value=rng.value; } else { num.value=rng.value; if(num.dataset.auto!=='1'){ num.dataset.auto='1'; num.classList.add('auto-fill'); } } } recalc(); EDIT.suppressRanges=false; EDIT.suppressSolve=false; EDIT.editingId=null; });
+  num.addEventListener('input', function(){ EDIT.suppressRanges=true; EDIT.suppressSolve=false; EDIT.editingId=id; clearAuto(id); var v=parseFloat(num.value); if(isFinite(v)) rng.value=String(v); recalc(); EDIT.suppressRanges=false; EDIT.editingId=null; }); }
+function updateSVG(a,b,c,d,thetaDeg){ var asm=getAsm(); var svg=$('#svg'); if(!svg) return; if(updateSVG._zoom==null) updateSVG._zoom=1; if(!updateSVG._cache) updateSVG._cache={a:null,b:null,c:null,d:null,z:null,vb:null,stroke:2}; function ensure(){ var ca=updateSVG._cache; if(ca.a===a && ca.b===b && ca.c===c && ca.d===d && ca.z===updateSVG._zoom && ca.vb){ return ca; } var A=Math.max(1,(a||1)), C=Math.max(1,(c||1)), D=Math.max(1,(d||1)); var left=-A, right=D+C; var halfY=Math.max(A,C); var spanX=right-left; var spanY=2*halfY; var basePad=Math.max(1,0.01*Math.max(spanX,spanY)); var padLeft=basePad*5.0, padRight=basePad*0.8; var padTop=basePad*0.15, padBottom=basePad*1.6; var xMin=left-padLeft, xMax=right+padRight; var yMin=-halfY-padTop, yMax=halfY+padBottom; var w=xMax-xMin, h=yMax-yMin; var z=Math.max(0.5,Math.min(3,updateSVG._zoom||1)); var cx=xMin+w/2, cy=yMin+h/2; var vw=w/z, vh=h/z; var vx=cx-vw/2, vy=cy-vh/2; var vb={ x:vx, y:vy, w:vw, h:vh }; svg.setAttribute('viewBox', vb.x.toFixed(2)+' '+vb.y.toFixed(2)+' '+vb.w.toFixed(2)+' '+vb.h.toFixed(2)); var span=Math.max(vb.w,vb.h); var stroke=Math.max(1.6, Math.min(4.8, span/140)); var mech=$('#mech'); if(mech) mech.setAttribute('stroke-width', stroke.toFixed(2)); var marker=$('#dot'); if(marker){ var r=Math.max(3.0, Math.min(9.0, span/80)); marker.setAttribute('markerUnits','userSpaceOnUse'); marker.setAttribute('markerWidth', (2*r).toFixed(1)); marker.setAttribute('markerHeight', (2*r).toFixed(1)); marker.setAttribute('viewBox', '0 0 '+(2*r).toFixed(1)+' '+(2*r).toFixed(1)); marker.setAttribute('refX', r.toFixed(1)); marker.setAttribute('refY', r.toFixed(1)); var mc=marker.querySelector('circle'); if(mc){ mc.setAttribute('cx', r.toFixed(1)); mc.setAttribute('cy', r.toFixed(1)); mc.setAttribute('r', (r-0.5).toFixed(1)); } } ca.a=a; ca.b=b; ca.c=c; ca.d=d; ca.z=z; ca.vb=vb; ca.stroke=stroke; return ca; } ensure(); function solvePoseLocal(a,b,c,d,theta){ var O2={ x: 0, y: 0 }, O4={ x: d, y: 0 }; var B={ x: a*Math.cos(theta), y: a*Math.sin(theta) }; var inter = circleIntersections(B.x,B.y,b, O4.x,O4.y,c); if(inter.length===0) return null; var C=choosePoint(inter[0], inter[1], asm); return { O2: O2, O4: O4, B: B, C: C }; } var linkA=$('#linkA'), linkB=$('#linkB'), linkC=$('#linkC'), linkD=$('#linkD'); var O2={x:0,y:0}, O4={x:d,y:0}; var theta=(thetaDeg)*Math.PI/180; var pose=solvePoseLocal(a,b,c,d,theta); linkD.setAttribute('x1',O2.x); linkD.setAttribute('y1',O2.y); linkD.setAttribute('x2',O4.x); linkD.setAttribute('y2',O4.y); if(!pose){ linkA.setAttribute('x1',O2.x); linkA.setAttribute('y1',O2.y); linkA.setAttribute('x2',O2.x); linkA.setAttribute('y2',O2.y); linkB.setAttribute('x1',O2.x); linkB.setAttribute('y1',O2.y); linkB.setAttribute('x2',O2.x); linkB.setAttribute('y2',O2.y); linkC.setAttribute('x1',O4.x); linkC.setAttribute('y1',O4.y); linkC.setAttribute('x2',O4.x); linkC.setAttribute('y2',O4.y); } else { var B=pose.B, C=pose.C; linkA.setAttribute('x1',O2.x); linkA.setAttribute('y1',O2.y); linkA.setAttribute('x2',B.x); linkA.setAttribute('y2',B.y); linkB.setAttribute('x1',B.x); linkB.setAttribute('y1',B.y); linkB.setAttribute('x2',C.x); linkB.setAttribute('y2',C.y); linkC.setAttribute('x1',O4.x); linkC.setAttribute('y1',O4.y); linkC.setAttribute('x2',C.x); linkC.setAttribute('y2',C.y); } }
+function computeAndRender(){ if(!EDIT.suppressRanges) refreshRanges(); var a=getValueForCompute('a'), b=getValueForCompute('b'), c=getValueForCompute('c'), d=getValueForCompute('d'); var asm=getAsm(); var useSwing=$('#useSwing').checked, useK=$('#useK').checked; var swingTarget=parseFloat($('#swingTarget').value), KTarget=parseFloat($('#KTarget').value); var uk=countWeakUnknown();
+  if(!EDIT.suppressSolve && uk.cnt===1 && (useSwing||useK)){
+    var which=useSwing? 'swing':'K'; var targetVal=useSwing? swingTarget:KTarget; if(isFinite(targetVal)){
+      var solved=solveUnknownByTarget(uk.id, which, targetVal);
+      if(solved){
+        markAuto(uk.id, solved.x);
+        if(uk.id==='a') a=solved.x; else if(uk.id==='b') b=solved.x; else if(uk.id==='c') c=solved.x; else d=solved.x;
+        var idSafe = uk.id.replace(/[^abcd]/g,'');
+        var msg = STATE.lang==='en'
+          ? '<span class="ok">Back-solved <b>'+idSafe+'</b> ≈ '+niceNum(solved.x,4)+' from target '+(which==='swing'?'swing':'K')+' (error '+niceNum(solved.err,4)+')</span>'
+          : '<span class="ok">已根据目标 '+(which==='swing'?'摆角':'K')+' 反推 <b>'+idSafe+'</b> ≈ '+niceNum(solved.x,4)+'（误差 '+niceNum(solved.err,4)+'）</span>';
+        setHTML('#solveHint', msg);
+      } else {
+        setHTML('#solveHint','<span class="warn">'+t('hint_no_solution')+'</span>');
+      }
+    } else { setHTML('#solveHint','<span class="warn">'+t('hint_input_valid')+'</span>'); }
+  } else if(!EDIT.suppressSolve) { setHTML('#solveHint',''); }
+
+  if(!(a&&b&&c&&d)){
+    setHTML('#classify','<span class="warn">'+t('need_params')+'</span>'); setText('#crankA','—'); setText('#crankACov','—'); setText('#swing','—'); setText('#qrr','—'); updateJSON({a:a,b:b,c:c,d:d,asm:asm,res:null}); var tr=$('#thetaRange'); if(tr) setText('#thetaLbl', (parseFloat(tr.value||'0')).toFixed(2)); updateSVG(a||0,b||0,c||0,d||0, parseFloat(($('#thetaRange')||{value:0}).value||'0')); return; }
+  var res=computeAll(a,b,c,d,asm); if(!res.ok){ setHTML('#classify','<span class="warn">'+escapeHTML(res.msg)+'</span>'); setText('#swing','—'); setText('#qrr','—'); } else { var cond = res.classify.type==='Grashof' ? '<span class="ok">'+t('Grashof')+'</span>' : '<span class="warn">'+t('NonGrashof')+'</span>'; setHTML('#classify', cond); setHTML('#crankA', res.crankAFull? '<span class="ok">'+t('Yes')+'</span>' : '<span class="warn">'+t('No')+'</span>'); setText('#crankACov', (res.coverageA*100).toFixed(1)+'%'); setText('#swing', res.swing.toFixed(2)); setText('#qrr', isNaN(res.K)? '—' : res.K.toFixed(3)); }
+  var tr=$('#thetaRange'); if(tr){ var intervals=res.ok? res.intervals:[]; if(intervals.length){ var mid=((intervals[0][0]+intervals[0][1])/2)*180/Math.PI; tr.value=mid; setText('#thetaLbl', mid.toFixed(2)); updateSVG(a,b,c,d, mid); } else { updateSVG(a,b,c,d, parseFloat(tr.value)); } }
+  updateJSON({a:a,b:b,c:c,d:d,asm:asm,res:res.ok?res:null}); }
+
+function updateJSON(state){ var res=state.res||null; var out={ input:{ a:state.a, b:state.b, c:state.c, d:state.d, assembly:state.asm }, results:{ swing_deg: (res && isFinite(res.swing))? res.swing : null, quick_return_K: (res && isFinite(res.K))? res.K : null, crank_a_full: res? !!res.crankAFull : null, crank_a_theta_coverage: res? res.coverageA : null, grashof: res? res.classify : null } }; setText('#json', JSON.stringify(out, null, 2)); }
+
+function wire(){ if(wire._done) return; wire._done=true; var calc=$('#calc'); if(calc) calc.addEventListener('click', computeAndRender); var reset=$('#reset'); if(reset) reset.addEventListener('click', function(){ ['a','b','c','d'].forEach(function(id){ var el=$('#'+id); if(el){ el.value=''; clearAuto(id);} }); ['ra','rb','rc','rd'].forEach(function(id,i){ var el=$('#'+id); if(el){ el.value=['30','70','60','90'][i]; }}); setText('#swing','—'); setText('#qrr','—'); setText('#classify','—'); setText('#json','{}'); $('#useSwing').checked=false; $('#useK').checked=false; $('#swingTarget').value=''; $('#KTarget').value=''; updateSVG._cache.vb=null; updateSVG(0,0,0,80,0); setHTML('#solveHint',''); }); var tr=$('#thetaRange'); if(tr) tr.addEventListener('input', function(e){ var theta=parseFloat(e.target.value); setText('#thetaLbl', theta.toFixed(2)); var a=getValueForCompute('a'), b=getValueForCompute('b'), c=getValueForCompute('c'), d=getValueForCompute('d'); if(a&&b&&c&&d) updateSVG(a,b,c,d, theta); }); var asms=$$('input[name="asm"]'); for(var i=0;i<asms.length;i++){ asms[i].addEventListener('change', computeAndRender); } ['a','b','c','d'].forEach(syncNumberAndRange); var copy=$('#copy'); if(copy) addEventListenerCopy(copy); var testBtn=$('#runTestsBtn'); if(testBtn) testBtn.addEventListener('click', function(){ try{ window.runTests && window.runTests(); }catch(e){ console.error(e); } }); $('#ra').value='30'; $('#rb').value='70'; $('#rc').value='60'; $('#rd').value='90'; $('#a').value=''; $('#b').value=''; $('#c').value=''; $('#d').value=''; var zbtn=$('#zoomBtn'); if(zbtn){ var levels=[0.8,1.0,1.25,1.5,1.75,2.0]; if(updateSVG._zoom==null) updateSVG._zoom=1.0; var idx=levels.indexOf(Number(updateSVG._zoom)); if(idx<0) idx=1; function zlabel(){ zbtn.textContent=t('zoom_prefix')+' '+Math.round((updateSVG._zoom||1)*100)+'%'; } zbtn.addEventListener('click', function(){ idx=(idx+1)%levels.length; updateSVG._zoom=levels[idx]; updateSVG._cache.vb=null; zlabel(); var theta=parseFloat(($('#thetaRange')||{value:0}).value||'0'); var a=getValueForCompute('a'), b=getValueForCompute('b'), c=getValueForCompute('c'), d=getValueForCompute('d'); if(a&&b&&c&&d) updateSVG(a,b,c,d, theta); }); zlabel(); }
+  // i18n wires
+  initI18n();
+  computeAndRender(); }
+function addEventListenerCopy(copy){ copy.addEventListener('click', function(){ var t=$('#json'); if(!t) return; var text=t.textContent||''; function legacy(){ var ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select(); var ok=false; try{ ok=document.execCommand('copy'); }catch(_){} document.body.removeChild(ta); return ok; } if(navigator.clipboard && window.isSecureContext){ navigator.clipboard.writeText(text).then(function(){ copy.textContent=t('copied'); setTimeout(function(){ copy.textContent=t('btn_copy'); },1200); }).catch(function(){ if(legacy()){ copy.textContent=t('copied'); setTimeout(function(){ copy.textContent=t('btn_copy'); },1200); } }); } else { if(legacy()){ copy.textContent=t('copied'); setTimeout(function(){ copy.textContent=t('btn_copy'); },1200); } } }); }
+function recalc(){ computeAndRender(); }
+if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', wire); } else { wire(); }
+function log(line){ var el=$('#testLog'); if(el) el.textContent += "\n"+line; }
+function clearLog(){ setText('#testLog',t('test_output')); }
+function runTests(){
+  clearLog(); var pass=0, fail=0;
+  function assert(name, cond){ if(cond){ pass++; log('✅ '+name); } else { fail++; log('❌ '+name); } }
+  try{ computeAndRender(); assert('computeAndRender ok', true);}catch(e){ assert('computeAndRender ok', false); }
+  var r1 = classifyGrashof(10,20,30,40); assert('Grashof', r1.type==='Grashof');
+  var r2 = classifyGrashof(90,30,20,10); assert('Non-Grashof', r2.type==='Non‑Grashof');
+  var fr = feasibleThetaRange(30,30,15,24); assert('feasibleThetaRange 2 segments', Array.isArray(fr)&&fr.length===2);
+  var pose = solvePose(30,30,15,24, Math.PI/3, 'open'); assert('solvePose', !!pose);
+  var res = computeAll(30,30,15,24,'open'); assert('computeAll swing finite', !!res.ok && isFinite(res.swing));
+  (function(){ var id='d', num=$('#'+id), rng=$('#r'+id); markAuto(id,24); var before=num.value; var rb=$('#rb').value, rc=$('#rc').value, ra=$('#ra').value; rng.value='30'; rng.dispatchEvent(new Event('input')); assert('weak slider changes itself', num.value!==before); assert('other sliders unchanged', rb===$('#rb').value && rc===$('#rc').value && ra===$('#ra').value); })();
+  (function(){ var ints = circleIntersections(0,0,5, 8,0,5); assert('two intersections', ints.length===2 && isFinite(ints[0].x) && isFinite(ints[1].x)); var ok = Math.abs(ints[0].x-4)<1e-6 && Math.abs(ints[1].x-4)<1e-6 && Math.abs(Math.abs(ints[0].y)-3)<1e-6 && Math.abs(Math.abs(ints[1].y)-3)<1e-6; assert('points≈(4,±3)', ok); var cp1=choosePoint(ints[0], ints[1], 'open'); var cp2=choosePoint(ints[0], ints[1], 'cross'); assert('choosePoint open higher y', cp1.y>=cp2.y); assert('choosePoint cross lower y', cp2.y<=cp1.y); })();
+  (function(){ var a=30,b=30,c=15,d=24,asm='open'; var base=computeAll(a,b,c,d,asm); var targetSwing=base.swing; $('#ra').value='30'; $('#rb').value='30'; $('#rc').value='15'; var rd=$('#rd'); rd.min='5'; rd.max='80'; var sol=solveUnknownByTarget('d','swing',targetSwing); assert('solveUnknownByTarget(d by swing)', !!sol && isFinite(sol.x)); })();
+  (function(){ var s = solvePose(20,25,30,35, Math.PI/6, 'open'); var ok = !!s && s.O2 && s.O4 && s.B && s.C && typeof s.phi==='number'; assert('solvePose structure', ok); })();
+  (function(){ var ps=[{x:1,y:2},{x:1,y:-2}]; var c1=choosePoint(ps[0],ps[1],'open'); var c2=choosePoint(ps[0],ps[1],'cross'); var ok = c1 && c2 && typeof c1.x==='number' && typeof c1.y==='number' && typeof c2.x==='number' && typeof c2.y==='number'; assert('choosePoint types', ok); })();
+  (function(){ ['a','b','c','d'].forEach(function(id){ $('#'+id).value=''; clearAuto(id); }); $('#rb').value='20'; $('#rc').value='10'; $('#rd').value='20'; $('#b').value='20'; $('#c').value='10'; $('#d').value='20'; clearAuto('b'); clearAuto('c'); clearAuto('d'); $('#useSwing').checked=true; $('#swingTarget').value='150'; var rb0=$('#rb').value, rc0=$('#rc').value, rd0=$('#rd').value; var ra=$('#ra'); ra.value='12'; ra.dispatchEvent(new Event('input')); assert('weak slider moves itself', Math.abs(parseFloat($('#a').value)-12)<1e-6); assert('other sliders unchanged', rb0===$('#rb').value && rc0===$('#rc').value && rd0===$('#rd').value); })();
+  (function(){ $('#a').value=''; clearAuto('a'); $('#b').value='20'; clearAuto('b'); $('#c').value='10'; clearAuto('c'); $('#d').value='20'; clearAuto('d'); $('#rb').value='20'; $('#rc').value='10'; $('#rd').value='20'; $('#useSwing').checked=true; $('#swingTarget').value='180'; computeAndRender(); var aval=parseFloat($('#a').value||$('#ra').value); var okA = Math.abs(aval-10)<0.5; var json=JSON.parse($('#json').textContent||'{}'); var okG = json.results && json.results.grashof && json.results.grashof.type==='Grashof'; var okFull = json.results && json.results.crank_a_full===true; assert('a≈10, Grashof, full', okA && okG && okFull); })();
+  (function(){ ['a','b','c','d'].forEach(function(id){ $('#'+id).value=''; clearAuto(id); }); $('#a').value='5'; clearAuto('a'); $('#b').value='10'; clearAuto('b'); $('#c').value='15'; clearAuto('c'); $('#d').value=''; clearAuto('d'); $('#useSwing').checked=false; $('#useK').checked=true; $('#KTarget').value='1'; computeAndRender(); var dval=parseFloat($('#d').value||$('#rd').value); var okD = isFinite(dval) && Math.abs(dval-18)<1.8; assert('d≈18 for K=1', okD); })();
+  (function(){ var a=30,b=30,c=15,d=24; updateSVG(a,b,c,d,0); var vb1=$('#svg').getAttribute('viewBox'); updateSVG(a,b,c,d,180); var vb2=$('#svg').getAttribute('viewBox'); assert('theta does not change zoom', vb1===vb2); })();
+  (function(){ var a=40,b=60,c=30,d=80; updateSVG._zoom=1.0; updateSVG(a,b,c,d,0); var vb1=$('#svg').getAttribute('viewBox').split(' ').map(parseFloat); updateSVG._zoom=2.0; updateSVG(a,b,c,d,0); var vb2=$('#svg').getAttribute('viewBox').split(' ').map(parseFloat); var ok = vb2[2] < vb1[2] && vb2[3] < vb1[3]; assert('zoom changes viewBox', ok); })();
+  log('—— tests end —— pass '+pass+', fail '+fail);
+}
+window.runTests = runTests;
+
+// ===== i18n =====
+var STATE = { lang: 'zh-CN' };
+var I18N = {
+  'zh-CN': {
+    title:'四杆机构参数计算器',
+    desc:'未知参数滑块<strong>内联</strong>到每个参数右侧：留空或填 0 = 未知，将由滑块控制。由“目标约束”反推的值以浅色虚线显示（弱定义），滑块可继续拖动；只有手动输入才算强定义并优先于滑块。',
+    assembly:'装配型式：', open:'开式', cross:'交叉式',
+    label_a:'曲柄 a (mm)', label_b:'连杆 b (mm)', label_c:'摇杆 c (mm)', label_d:'机架 d (mm)',
+    ph_example_30:'例如 30', ph_example_70:'例如 70', ph_example_60:'例如 60', ph_example_90:'例如 90',
+    hint_a:'Crank · 留空=用滑块', hint_b:'Coupler · 留空=用滑块', hint_c:'Rocker · 留空=用滑块', hint_d:'Ground · 留空=用滑块',
+    opt_constraints:'可选目标约束', opt_desc:'勾选后可将 <b>摇杆摆角</b> 或 <b>K</b> 作为目标来反推一个未知杆长（当且仅当 a/b/c/d 恰好有一个未强定义/未知时自动求解）。',
+    target_swing:'目标·摇杆摆角 (°)', use_as_constraint:'作为约束', target_k:'目标·行程速度变化系数 K', ph_swing:'例如 40（φmax−φmin）', ph_k:'例如 1.40（快返比）',
+    btn_compute:'计算', btn_reset:'清空', weak_vs_strong:'浅色虚线=自动反推(弱定义)，滑块可继续拖动；手动输入=强定义，优先级更高。',
+    preview_title:'机构预览 & 输入曲柄角 θ（仅在可装配范围内生效）', legend_a:'曲柄 a', legend_b:'连杆 b', legend_c:'摇杆 c', legend_d:'机架 d',
+    zoom_btn:'缩放 100%', theta_hint:'拖动 θ 观察机构姿态；当两圆相切即为极限位（死点）。',
+    results:'计算结果', m_fulla_h3:'a 是否可整周', m_cov_suffix:'的 θ 可装配', m_swing_h3:'摇杆摆角 φ\u2098\u2093−φ\u2098\u2099', unit_deg:'单位：°', m_grashof_h3:'机构判别 · Grashof 条件', m_grashof_sub:'判别结果', m_k_h3:'行程速度变化系数 K', m_k_sub:'快返比（回程角/去程角）',
+    copy_json:'可复制 JSON', btn_copy:'复制', copied:'已复制', tests:'内置测试', run_tests:'运行测试', test_output:'(测试输出)', notes:'说明', n1:'输入框留空/为 0 → 视为未知，将由右侧滑块控制并参与计算。', n2:'自动反推会写入浅色虚线（弱定义）；滑块仍可拖动更改该值，且不会转为强定义，直至你手动编辑。', n3:'极限位：r=|O₄−B|=b±c；cosθ=(a²+d²−r²)/(2ad)。K=回程角/去程角。',
+    err_no_assembly:'几何不可装配（两圆始终不相交/相离）', err_sampling:'采样失败，检查参数', need_params:'请提供足够参数（留空/弱定义可用滑块控制）', hint_no_solution:'当前范围内无法反推值，请调整范围或目标。', hint_input_valid:'请输入有效的目标数值。',
+    Grashof:'Grashof', NonGrashof:'Non‑Grashof', Yes:'是', No:'否', zoom_prefix:'缩放'
+  },
+  'en': {
+    title:'Four‑Bar Mechanism Calculator',
+    desc:'Unknown parameters are <strong>inlined</strong> with a slider on the right: leave empty or 0 = unknown, controlled by the slider. Values back‑solved from "Target constraints" are shown as light dashed text (weakly defined) and the slider remains draggable; only manual input is treated as strongly defined and takes precedence.',
+    assembly:'Assembly:', open:'Open', cross:'Crossed',
+    label_a:'Crank a (mm)', label_b:'Coupler b (mm)', label_c:'Rocker c (mm)', label_d:'Ground d (mm)',
+    ph_example_30:'e.g., 30', ph_example_70:'e.g., 70', ph_example_60:'e.g., 60', ph_example_90:'e.g., 90',
+    hint_a:'Crank · leave empty = use slider', hint_b:'Coupler · leave empty = use slider', hint_c:'Rocker · leave empty = use slider', hint_d:'Ground · leave empty = use slider',
+    opt_constraints:'Optional target constraints', opt_desc:'When checked, you may use <b>rocker swing</b> or <b>K</b> as a target to back‑solve one unknown link length (auto‑solve only when exactly one of a/b/c/d is not strongly defined).',
+    target_swing:'Target · Rocker swing (°)', use_as_constraint:'Use as constraint', target_k:'Target · Quick‑return coefficient K', ph_swing:'e.g., 40 (φmax−φmin)', ph_k:'e.g., 1.40 (quick‑return ratio)',
+    btn_compute:'Compute', btn_reset:'Reset', weak_vs_strong:'Light dashed value = back‑solved (weak); slider still draggable. Manual input = strong and takes precedence.',
+    preview_title:'Mechanism preview & crank angle θ (effective only within assemblable range)', legend_a:'Crank a', legend_b:'Coupler b', legend_c:'Rocker c', legend_d:'Ground d',
+    zoom_btn:'Zoom 100%', theta_hint:'Drag θ to inspect poses; tangency of the two circles indicates a limit position (dead center).',
+    results:'Results', m_fulla_h3:'Can crank a rotate fully?', m_cov_suffix:' of θ assemblable', m_swing_h3:'Rocker swing φ\u2098\u2093−φ\u2098\u2099', unit_deg:'Unit: °', m_grashof_h3:'Classification · Grashof condition', m_grashof_sub:'Result', m_k_h3:'Quick‑return coefficient K', m_k_sub:'Quick‑return ratio (return/forward angle)',
+    copy_json:'Copyable JSON', btn_copy:'Copy', copied:'Copied', tests:'Built‑in tests', run_tests:'Run tests', test_output:'(Test output)', notes:'Notes', n1:'Empty/0 input → treated as unknown; the right slider controls it for computation.', n2:'Back‑solved values are light dashed (weak); the slider remains draggable and it won\'t become strong until you edit the input.', n3:'Limits: r=|O₄−B|=b±c; cosθ=(a²+d²−r²)/(2ad). K = return angle / forward angle.',
+    err_no_assembly:'Geometrically not assemblable (the two circles never intersect).', err_sampling:'Sampling failed. Please check parameters.', need_params:'Please provide enough parameters (sliders control empty/weak ones).', hint_no_solution:'No solution in the current range. Adjust ranges or the target.', hint_input_valid:'Please enter a valid target value.',
+    Grashof:'Grashof', NonGrashof:'Non‑Grashof', Yes:'Yes', No:'No', zoom_prefix:'Zoom'
+  }
+};
+function t(key){ var lang=STATE.lang||'zh-CN'; return (I18N[lang]&&I18N[lang][key]) || (I18N['en']&&I18N['en'][key]) || key; }
+function applyI18n(){
+  // text nodes
+  $$('[data-i18n]').forEach(function(el){ var k=el.getAttribute('data-i18n'); if(k) el.innerHTML = t(k); });
+  // placeholders
+  $$('[data-i18n-ph]').forEach(function(el){ var k=el.getAttribute('data-i18n-ph'); if(k) el.setAttribute('placeholder', t(k)); });
+  // special: zoom button label with current %
+  var zbtn=$('#zoomBtn'); if(zbtn){ zbtn.textContent = t('zoom_prefix')+' '+Math.round((updateSVG._zoom||1)*100)+'%'; }
+  // test log placeholder
+  var tl=$('#testLog'); if(tl && (!tl.textContent || /^\(.*\)$/.test(tl.textContent))) tl.textContent=t('test_output');
+  // document lang
+  document.documentElement.setAttribute('lang', STATE.lang==='en' ? 'en' : 'zh-CN');
+}
+function setLang(lang){ STATE.lang = (lang==='en')?'en':'zh-CN'; localStorage.setItem('lang_4bar', STATE.lang); applyI18n(); computeAndRender(); // refresh any dynamic strings
+  // toggle UI state
+  var zh=$('#btnZH'), en=$('#btnEN'); if(zh&&en){ if(STATE.lang==='en'){ en.classList.add('active'); en.setAttribute('aria-selected','true'); zh.classList.remove('active'); zh.setAttribute('aria-selected','false'); } else { zh.classList.add('active'); zh.setAttribute('aria-selected','true'); en.classList.remove('active'); en.setAttribute('aria-selected','false'); } }
+}
+function initI18n(){ var saved=localStorage.getItem('lang_4bar'); if(saved){ STATE.lang=saved; } else { STATE.lang=(document.documentElement.lang||'zh-CN'); }
+  // attach event listeners
+  var zh=$('#btnZH'), en=$('#btnEN'); if(zh) zh.addEventListener('click', function(){ setLang('zh-CN'); }); if(en) en.addEventListener('click', function(){ setLang('en'); });
+  applyI18n(); setLang(STATE.lang); }
+})();
+</script>
+</body>
+</html>
